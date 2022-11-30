@@ -47,6 +47,7 @@ local config = {
                         spell = false, -- sets vim.opt.spell
                         signcolumn = "auto", -- sets vim.opt.signcolumn to auto
                         wrap = false, -- sets vim.opt.wrap
+                        tabstop = 4,
                 },
                 g = {
                         mapleader = " ", -- sets vim.g.mapleader
@@ -115,9 +116,9 @@ local config = {
                         hop = false,
                         indent_blankline = true,
                         lightspeed = false,
-                        ["neo-tree"] = true,
+                        ["neo-tree"] = false,
                         notify = true,
-                        ["nvim-tree"] = false,
+                        ["nvim-tree"] = true,
                         ["nvim-web-devicons"] = true,
                         rainbow = true,
                         symbols_outline = false,
@@ -138,14 +139,15 @@ local config = {
         lsp = {
                 -- enable servers that you already have installed without mason
                 servers = {
-                        -- "pyright"
+                        --"eslint_d"
+                        
                 },
                 formatting = {
                         -- control auto formatting on save
                         format_on_save = {
                                 enabled = true, -- enable or disable format on save globally
                                 allow_filetypes = { -- enable format on save for specified filetypes only
-                                        -- "go",
+                                        -- "go", 
                                 },
                                 ignore_filetypes = { -- disable format on save for specified filetypes
                                         -- "python",
@@ -159,6 +161,60 @@ local config = {
                         --   return true
                         -- end
                 },
+                on_attach = function(client, bufnr)
+		      if client.name == "tsserver" then
+		        client.server_capabilities.documentFormattingProvider = false
+		        local ts_utils = require("nvim-lsp-ts-utils")
+
+		        -- defaults
+		        ts_utils.setup({
+		            debug = false,
+		            disable_commands = false,
+		            enable_import_on_completion = false,
+		            -- import all
+		            import_all_timeout = 5000,
+		            import_all_priorities = {
+		                same_file = 1, -- add to existing import statement
+		                local_files = 2, -- git files or files with relative path markers
+		                buffer_content = 3, -- loaded buffer content
+		                buffers = 4, -- loaded buffer names
+		            },
+		            import_all_scan_buffers = 100,
+		            import_all_select_source = false,
+		            -- if false will avoid organizing imports
+		            always_organize_imports = true,
+
+		            -- filter diagnostics
+		            filter_out_diagnostics_by_severity = {},
+		            filter_out_diagnostics_by_code = {},
+
+		            -- inlay hints
+		            auto_inlay_hints = true,
+		            inlay_hints_highlight = "Comment",
+		            inlay_hints_priority = 200, -- priority of the hint extmarks
+		            inlay_hints_throttle = 150, -- throttle the inlay hint request
+		            inlay_hints_format = { -- format options for individual hint kind
+		                Type = {},
+		                Parameter = {},
+		                Enum = {},
+		            },
+
+		            -- update imports on file move
+		            update_imports_on_move = true,
+		            require_confirmation_on_move = false,
+		            watch_dir = nil,
+		          })
+
+		        ts_utils.setup_client(client)
+
+		        -- key mappings
+		        local opts = { silent = true }
+		        vim.api.nvim_buf_set_keymap(bufnr, "n", "<space>lo", ":TSLspOrganize<CR>", opts)
+		        vim.api.nvim_buf_set_keymap(bufnr, "n", "<space>lR", ":TSLspRenameFile<CR>", opts)
+		        vim.api.nvim_buf_set_keymap(bufnr, "n", "<space>lA", ":TSLspImportAll<CR>", opts)
+
+		        end
+		end,
                 -- easily add or disable built in mappings added during LSP attaching
                 mappings = {
                         n = {
@@ -188,6 +244,9 @@ local config = {
                         --     },
                         --   },
                         -- },
+                        tsserver = {
+			        init_options = require("nvim-lsp-ts-utils").init_options,
+			},
                 },
         },
 
@@ -252,7 +311,8 @@ local config = {
                         -- },
                         "EdenEast/nightfox.nvim",
                         "nvim-tree/nvim-tree.lua",
-
+                        "jose-elias-alvarez/nvim-lsp-ts-utils",
+                        "AndrewRadev/tagalong.vim",
                         -- We also support a key value style plugin definition similar to NvChad:
                         -- ["ray-x/lsp_signature.nvim"] = {
                         --   event = "BufRead",
@@ -264,16 +324,32 @@ local config = {
                 -- All other entries override the require("<key>").setup({...}) call for default plugins
                 ["null-ls"] = function(config) -- overrides `require("null-ls").setup(config)`
                         -- config variable is the default configuration table for the setup function call
-                        -- local null_ls = require "null-ls"
-
+                        local null_ls = require "null-ls"
                         -- Check supported formatters and linters
                         -- https://github.com/jose-elias-alvarez/null-ls.nvim/tree/main/lua/null-ls/builtins/formatting
-                        -- https://github.com/jose-elias-alvarez/null-ls.nvim/tree/main/lua/null-ls/builtins/diagnostics
+                        -- https://github.com/jose-elias-alvarez/null-ls.nvim/tree/main/lua/null-ls/builtins/diagnostics 
                         config.sources = {
-                                -- Set a formatter
-                                -- null_ls.builtins.formatting.stylua,
-                                -- null_ls.builtins.formatting.prettier,
+                                -- Set prettierd as default formatter
+                                null_ls.builtins.formatting.prettierd,
+                                -- Set eslint_d as default linter
+                                null_ls.builtins.diagnostics.eslint_d.with({
+                                        only_local = "node_modules/.bin"
+                                }),
+                                -- Set eslint_d as default code actions
+                                null_ls.builtins.code_actions.eslint_d.with({
+                                        only_local = "node_modules/.bin"
+                                }),
                         }
+                        config.on_attach = function(client)
+				 -- Enable formatting on save
+			        if client.server_capabilities.documentFormattingProvider then
+			          vim.api.nvim_create_autocmd("BufWritePre", {
+			            desc = "Auto format before save",
+			            pattern = "<buffer>",
+			            callback = vim.lsp.buf.formatting_sync,
+			          })
+			        end
+			end
                         return config -- return final config table
                 end,
                 treesitter = { -- overrides `require("treesitter").setup(...)`
@@ -328,6 +404,11 @@ local config = {
                                         -- third key is the key to bring up next level and its displayed
                                         -- group name in which-key top level menu
                                         ["b"] = { name = "Buffer" },
+                                        ["l"] = {
+		                                ["o"] = { "Organize Imports" },
+		                                ["R"] = { "Rename current file" },
+		                                ["A"] = { "Import all missing" },
+		                        },
                                 },
                         },
                 },
